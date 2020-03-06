@@ -10,40 +10,29 @@ import os
 from flask_mail import Mail, Message
 
 app = Flask(__name__)
-app.config['MAIL_DEFAULT_SENDER'] = "youremail@yourdomain.net"
-mail = Mail(app)
-
-def email (subject, body):
-    msg = Message(subject, recipients=["from@you.com"])
-    msg.body = body
-    mail.send(msg)
-
-
 
 def verify_hmac_hash(data, signature):
     github_secret = bytes(os.environ['GITHUB_SECRET'], 'UTF-8')
     mac = hmac.new(github_secret, msg=data, digestmod=hashlib.sha1)
     return hmac.compare_digest('sha1=' + mac.hexdigest(), signature)
 
-
-@app.route("/payload", methods=['POST'])
+@app.route("/hook", methods=['POST'])
 def github_payload():
     signature = request.headers.get('X-Hub-Signature')
     data = request.data
     if verify_hmac_hash(data, signature):
         if request.headers.get('X-GitHub-Event') == "ping":
-            return jsonify({'msg': 'Ok'})
+            return jsonify({'msg': 'pong'})
         if request.headers.get('X-GitHub-Event') == "push":
             payload = request.get_json()
             if payload['commits'][0]['distinct'] == True:
+                branch = payload['ref'].split('/', 2)[2]
+                name = payload['repository']['name']
                 try:
                     cmd_output = subprocess.check_output(
-                        ['git', 'pull', 'origin', 'master'],)
-                    subject"Code deployed successfully"
-                    email(, cmd_output)
+                        ['sh', '/app/hooks/' + name + '-' + branch + '.sh'])
                     return jsonify({'msg': str(cmd_output)})
                 except subprocess.CalledProcessError as error:
-                    email("Code deployment failed", error.output)
                     return jsonify({'msg': str(error.output)})
             else:
                 return jsonify({'msg': 'nothing to commit'})
@@ -54,4 +43,4 @@ def github_payload():
 
 if __name__ == "__main__":
     app.debug = True
-    app.run(host="127.0.0.1")
+    app.run(host="0.0.0.0")
